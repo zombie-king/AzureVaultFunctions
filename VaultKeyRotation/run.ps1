@@ -1,56 +1,20 @@
 param($eventGridEvent, $TriggerMetadata)
 
-function GetAlternateCredentialId($keyId) {
-    $validCredentialIdsRegEx = 'key[1-2]'
-    
-    If ($keyId -NotMatch $validCredentialIdsRegEx) {
-        throw "Invalid credential id: $keyId. Credential id must follow this pattern: $validCredentialIdsRegEx"
-    }
-    If ($keyId -eq 'key1') {
-        return "key2"
-    }
-    Else {
-        return "key1"
-    }
-}
-
-$DefaultValidityPeriodDays = "180"
-$DefaultCredentialId = "key1"
-
+# By a key rotation we mean creating a new version of the key
 function RoatateKey($vaultName, $keyName) {
     # Retrieve Key
     $key = Get-AzKeyVaultKey -VaultName $vaultName -Name $keyName
     $version = $key.Version.ToString()
     Write-Host "Key Retrieved. Version: $version"
-    
-    # Retrieve Key Info
-    if ($null -eq $key.Tags) {
-        $key.Tags = @{}
-    }    
+
     $validityPeriodDays = $key.Tags["ValidityPeriodDays"]
-    if ([string]::IsNullOrWhitespace($validityPeriodDays)) {
-        $validityPeriodDays = $DefaultValidityPeriodDays
-    }
-    $credentialId = $key.Tags["CredentialId"]
-    if ([string]::IsNullOrWhitespace($credentialId)) {
-        $credentialId = $DefaultCredentialId
-    }
-    #$providerAddress = $key.Tags["ProviderAddress"]
     
     Write-Host "Key Info Retrieved"
     Write-Host "Validity Period: $validityPeriodDays"
-    Write-Host "Credential Id: $credentialId"
-    #Write-Host "Provider Address: $providerAddress"
-
-    # Get Credential Id to rotate - alternate credential
-    $alternateCredentialId = GetAlternateCredentialId $credentialId
-    Write-Host "Alternate credential id: $alternateCredentialId"
 
     # Add a new key to Key Vault
     $newKeyVersionTags = @{}
     $newKeyVersionTags.ValidityPeriodDays = $validityPeriodDays
-    $newKeyVersionTags.CredentialId = $alternateCredentialId
-    # $newKeyVersionTags.ProviderAddress = $providerAddress
 
     $expiryDate = (Get-Date).AddDays([int] $validityPeriodDays).ToUniversalTime()
     $newKey = Add-AzKeyVaultKey -VaultName $vaultName -Name $keyName -Tag $newKeyVersionTags -Expires $expiryDate -Destination Software
@@ -58,7 +22,7 @@ function RoatateKey($vaultName, $keyName) {
     Write-Host "New key added to Key Vault. Key Version: $newVersion"
     # $newKey | ConvertTo-Json | Write-Host
 
-    #TODO clean expired keys
+    # TODO clean expired keys - not possible
 }
 
 # Make sure to pass hashtables to Out-String so they're logged correctly
